@@ -1,0 +1,15 @@
+{
+  "channel": "the twitch cannel to listen on",
+  "username": "the twitch bot name",
+  "oauth_token": "...",
+  "tags": [
+    {
+      "tag": "#firsttag",
+      "webhook": "https://discord.com/api/webhooks/..."
+    },
+    {
+      "tag": "#secondtag",
+      "webhook": "https://discord.com/api/webhooks/..."
+    }
+  ]
+}
