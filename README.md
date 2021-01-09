@@ -22,3 +22,5 @@ Just change the config.json file to your needs and start the bot:
 }
 
 ```
+
+Mods and Broadcaster can (de)activate the bot using #activate resp. #deactivate.

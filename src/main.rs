@@ -46,6 +46,12 @@ fn read_config(config_file: &str) -> Option<BotConfig> {
     }
 }
 
+fn is_mod(badges: &[twitch_irc::message::Badge]) -> bool {
+    badges
+        .iter()
+        .any(|b| b.name == "moderator" || b.name == "broadcaster")
+}
+
 #[tokio::main]
 pub async fn main() {
     let args = std::env::args().collect::<Vec<_>>();
@@ -63,6 +69,8 @@ pub async fn main() {
             Some(bc.oauth_token),
         ));
 
+        let mut activated = true;
+
         let (mut incoming_messages, ircclient) =
             TwitchIRCClient::<TCPTransport, StaticLoginCredentials>::new(config);
 
@@ -72,18 +80,27 @@ pub async fn main() {
                     twitch_irc::message::PrivmsgMessage {
                         message_text,
                         sender,
+                        badges,
                         ..
                     },
                 ) = message
                 {
-                    for t in tags.iter() {
-                        if message_text.clone().contains(&t.tag) {
-                            let client = reqwest::blocking::Client::new();
-                            let _res = client
-                                .post(&t.webhook)
-                                .json(&msg(sender.login.clone(), message_text.clone()))
-                                .send()
-                                .expect("Bot can't send to Discord.");
+                    if message_text == "#deactivate" && is_mod(&badges) {
+                        println!("deactivated");
+                        activated = false;
+                    } else if message_text == "#activate" && is_mod(&badges) {
+                        activated = true;
+                        println!("activated");
+                    } else if activated {
+                        for t in tags.iter() {
+                            if message_text.clone().contains(&t.tag) {
+                                let client = reqwest::blocking::Client::new();
+                                let _res = client
+                                    .post(&t.webhook)
+                                    .json(&msg(sender.login.clone(), message_text.clone()))
+                                    .send()
+                                    .expect("Bot can't send to Discord.");
+                            }
                         }
                     }
                 }
