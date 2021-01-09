@@ -33,8 +33,8 @@ struct BotConfig {
     tags: Vec<Tag>,
 }
 
-fn read_config() -> Option<BotConfig> {
-    let file = std::fs::File::open("config.json").ok()?;
+fn read_config(config_file: &str) -> Option<BotConfig> {
+    let file = std::fs::File::open(config_file).ok()?;
     let reader = std::io::BufReader::new(file);
     let r = serde_json::from_reader(reader);
     match r {
@@ -48,7 +48,14 @@ fn read_config() -> Option<BotConfig> {
 
 #[tokio::main]
 pub async fn main() {
-    if let Some(bc) = read_config() {
+    let args = std::env::args().collect::<Vec<_>>();
+    let mut config_file = "config.json";
+    if args.len() == 2 {
+        config_file = &args[1];
+    }
+    println!("Use config file: {:#?}", config_file);
+
+    if let Some(bc) = read_config(config_file) {
         let tags = bc.tags;
 
         let config = ClientConfig::new_simple(StaticLoginCredentials::new(
