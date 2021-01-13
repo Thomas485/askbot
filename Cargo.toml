@@ -8,6 +8,13 @@ edition = "2018"
 reqwest = { version="*", features = ["blocking","json"] }
 serde = { version = "*", features = ["derive"] }
 serde_json = "*"
+serde_any = "*"
 twitch-irc = "*"
 tokio = "*"
 futures = "*"
+rocket = { version="*", optional = true }
+#base64 = { version="*", optional = true }
+
+[features]
+default = []
+webfrontend = ["rocket"]
