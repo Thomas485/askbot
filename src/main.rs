@@ -44,6 +44,18 @@ pub struct BotConfig {
     tags: Vec<Tag>,
     #[serde(default)]
     key: String,
+    #[serde(default)]
+    mods: Vec<String>,
+}
+
+async fn privmsg<T>(
+    channel: String,
+    client: &twitch_irc::TwitchIRCClient<TCPTransport, StaticLoginCredentials>,
+    msg: T,
+) where
+    T: Into<String>,
+{
+    let r = client.privmsg(channel, msg.into()).await;
 }
 
 pub fn read_config(config_file: &str) -> std::result::Result<BotConfig, serde_any::Error> {
@@ -95,6 +107,114 @@ fn send_messages(
     }
 }
 
+enum Whisper {
+    Add(String, String),
+    Remove(String),
+    List,
+    Nothing,
+}
+
+fn parse_whisper(bc: &BotConfig, login: &String, message_text: String) -> Whisper {
+    if bc.mods.iter().any(|m| *m == *login) || *login == bc.channel {
+        match message_text.split_whitespace().collect::<Vec<&str>>()[..] {
+            ["#list"] => Whisper::List,
+            ["#add", tag, webhook] => Whisper::Add(tag.to_string(), webhook.to_string()),
+            ["#remove", tag] => Whisper::Remove(tag.to_string()),
+            _ => Whisper::Nothing,
+        }
+    } else {
+        return Whisper::Nothing;
+    }
+}
+
+fn join_tags(ts: &[Tag]) -> String {
+    ts.iter()
+        .map(|t| t.tag.clone())
+        .collect::<Vec<String>>()
+        .join(", ")
+}
+
+async fn handle_message(
+    ircclient: &Arc<TwitchIRCClient<TCPTransport, StaticLoginCredentials>>,
+    config_file: &String,
+    message: twitch_irc::message::ServerMessage,
+    irc_bc: &Arc<RwLock<BotConfig>>,
+    activated: &mut bool,
+) {
+    match message {
+        twitch_irc::message::ServerMessage::Privmsg(twitch_irc::message::PrivmsgMessage {
+            message_text,
+            sender,
+            badges,
+            ..
+        }) => {
+            if message_text.to_lowercase() == "#deactivate" && is_mod(&badges) {
+                println!("deactivated");
+                *activated = false;
+            } else if message_text.to_lowercase() == "#activate" && is_mod(&badges) {
+                *activated = true;
+                println!("activated");
+            } else if *activated {
+                send_messages(&irc_bc.read().unwrap(), message_text, &sender);
+            }
+        }
+        twitch_irc::message::ServerMessage::Whisper(twitch_irc::message::WhisperMessage {
+            sender: twitch_irc::message::TwitchUserBasics { login, .. },
+            message_text,
+            ..
+        }) => {
+            let mut reply = None;
+            {
+                let mut bc = irc_bc.write().unwrap();
+                if bc.mods.iter().any(|m| *m == login) || login == bc.channel {
+                    match parse_whisper(&bc, &login, message_text) {
+                        Whisper::Add(tag, webhook) => {
+                            let new_tag = Tag {
+                                tag: tag.clone(),
+                                webhook,
+                            };
+                            bc.tags.push(new_tag);
+                            write_config(&config_file, &bc);
+                            reply = Some((
+                                bc.channel.clone(),
+                                login.clone(),
+                                format!("Tag added: {}", &tag),
+                            ));
+                            println!("Tag added: {}", tag);
+                        }
+                        Whisper::Remove(tag) => {
+                            let tmp_tag = tag.clone();
+                            if let Some(pos) = bc.tags.iter().position(|x| *x.tag == tmp_tag) {
+                                bc.tags.remove(pos);
+                            }
+                            write_config(&config_file, &bc);
+                            reply = Some((
+                                bc.channel.clone(),
+                                login.clone(),
+                                format!("Tag removed: {}", &tag),
+                            ));
+                            println!("Tag removed: {}", tag);
+                        }
+                        Whisper::List => {
+                            reply = Some((
+                                bc.channel.clone(),
+                                login.clone(),
+                                format!("Tags: {}", join_tags(&bc.tags)),
+                            ));
+                            println!("List Tags");
+                        }
+                        Whisper::Nothing => println!("Whisper ignored"),
+                    }
+                }
+            }
+            if let Some((c, u, m)) = reply {
+                privmsg(c, &ircclient, format!("/w {} \"{}\"", u, m)).await;
+            }
+        }
+        _ => (),
+    }
+}
+
 #[tokio::main]
 pub async fn main() -> Result<(), std::io::Error> {
     let args = std::env::args().collect::<Vec<_>>();
@@ -112,8 +232,10 @@ pub async fn main() -> Result<(), std::io::Error> {
             let irc_bc = Arc::clone(&main_bc);
 
             #[cfg(feature = "webfrontend")]
+            let config_file2 = config_file.clone();
+            #[cfg(feature = "webfrontend")]
             let rocket_handle = tokio::spawn(async move {
-                web::rocket_main(rocket_bc, config_file.to_string());
+                web::rocket_main(rocket_bc, config_file2.to_string());
             });
 
             let config = ClientConfig::new_simple(StaticLoginCredentials::new(
@@ -126,31 +248,18 @@ pub async fn main() -> Result<(), std::io::Error> {
             let (mut incoming_messages, ircclient) =
                 TwitchIRCClient::<TCPTransport, StaticLoginCredentials>::new(config);
 
+            let irc_client = Arc::new(ircclient);
+            let irc_client_main = Arc::clone(&irc_client);
+
             let join_handle = tokio::spawn(async move {
                 while let Some(message) = incoming_messages.recv().await {
-                    if let twitch_irc::message::ServerMessage::Privmsg(
-                        twitch_irc::message::PrivmsgMessage {
-                            message_text,
-                            sender,
-                            badges,
-                            ..
-                        },
-                    ) = message
-                    {
-                        if message_text.to_lowercase() == "#deactivate" && is_mod(&badges) {
-                            println!("deactivated");
-                            activated = false;
-                        } else if message_text.to_lowercase() == "#activate" && is_mod(&badges) {
-                            activated = true;
-                            println!("activated");
-                        } else if activated {
-                            send_messages(&irc_bc.read().unwrap(), message_text, &sender);
-                        }
-                    }
+                    handle_message(&irc_client, &config_file, message, &irc_bc, &mut activated)
+                        .await;
                 }
             });
 
-            ircclient.join(main_bc.read().unwrap().channel.clone());
+            let channel = main_bc.read().unwrap().channel.clone();
+            irc_client_main.join(channel.clone());
 
             join_handle.await.expect("");
 
