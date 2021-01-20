@@ -8,6 +8,9 @@ use twitch_irc::TwitchIRCClient;
 
 use std::sync::{Arc, RwLock};
 
+#[allow(unused_imports)]
+use log::{debug, error, info, warn};
+
 #[cfg(feature = "webfrontend")]
 #[macro_use]
 extern crate rocket;
@@ -92,7 +95,7 @@ fn send_messages(
                     if resp.status().is_success() {
                         // TODO: nothing?
                     } else {
-                        println!(
+                        error!(
                             "Error: Code: {} Reason: {:?}",
                             resp.status(),
                             resp.status().canonical_reason()
@@ -100,7 +103,7 @@ fn send_messages(
                     }
                 }
                 Err(e) => {
-                    println!("Error: {}", e);
+                    error!("Error: {}", e);
                 }
             };
         }
@@ -149,11 +152,11 @@ async fn handle_message(
             ..
         }) => {
             if message_text.to_lowercase() == "#deactivate" && is_mod(&badges) {
-                println!("deactivated");
+                info!("deactivated");
                 *activated = false;
             } else if message_text.to_lowercase() == "#activate" && is_mod(&badges) {
                 *activated = true;
-                println!("activated");
+                info!("activated");
             } else if *activated {
                 send_messages(&irc_bc.read().unwrap(), message_text, &sender);
             }
@@ -180,7 +183,7 @@ async fn handle_message(
                                 login.clone(),
                                 format!("Tag added: {}", &tag),
                             ));
-                            println!("Tag added: {}", tag);
+                            info!("Tag added: {}", tag);
                         }
                         Whisper::Remove(tag) => {
                             let tmp_tag = tag.clone();
@@ -193,7 +196,7 @@ async fn handle_message(
                                 login.clone(),
                                 format!("Tag removed: {}", &tag),
                             ));
-                            println!("Tag removed: {}", tag);
+                            info!("Tag removed: {}", tag);
                         }
                         Whisper::List => {
                             reply = Some((
@@ -201,9 +204,9 @@ async fn handle_message(
                                 login.clone(),
                                 format!("Tags: {}", join_tags(&bc.tags)),
                             ));
-                            println!("List Tags");
+                            info!("List Tags");
                         }
-                        Whisper::Nothing => println!("Whisper ignored"),
+                        Whisper::Nothing => info!("Whisper ignored"),
                     }
                 }
             }
@@ -217,12 +220,14 @@ async fn handle_message(
 
 #[tokio::main]
 pub async fn main() -> Result<(), std::io::Error> {
+    env_logger::init();
+
     let args = std::env::args().collect::<Vec<_>>();
     let mut config_file = "config.json".to_string();
     if args.len() == 2 {
         config_file = args[1].to_string();
     }
-    println!("Use config file: {:#?}", config_file);
+    info!("Use config file: {:#?}", config_file);
 
     match read_config(&config_file) {
         Ok(bc) => {
@@ -266,7 +271,7 @@ pub async fn main() -> Result<(), std::io::Error> {
             #[cfg(feature = "webfrontend")]
             rocket_handle.await.expect("");
         }
-        Err(e) => println!("Error: {}", e),
+        Err(e) => error!("Error: {}", e),
     }
     Ok(())
 }

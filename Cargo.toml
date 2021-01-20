@@ -12,6 +12,8 @@ serde_any = "*"
 twitch-irc = "*"
 tokio = "*"
 futures = "*"
+log = "*"
+env_logger = "*"
 rocket = { version="*", optional = true }
 #base64 = { version="*", optional = true }
 
