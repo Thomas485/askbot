@@ -49,6 +49,8 @@ pub struct BotConfig {
     key: String,
     #[serde(default)]
     mods: Vec<String>,
+    #[serde(default)]
+    log_webhook: String,
 }
 
 async fn privmsg<T>(
@@ -77,6 +79,25 @@ fn is_mod(badges: &[twitch_irc::message::Badge]) -> bool {
         .iter()
         .any(|b| b.name == "moderator" || b.name == "broadcaster")
 }
+fn send_message(webhook: &str, sender: String, text: String) {
+    let client = reqwest::blocking::Client::new();
+    match client.post(webhook).json(&msg(sender, text)).send() {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                // TODO: nothing?
+            } else {
+                error!(
+                    "Error: Code: {} Reason: {:?}",
+                    resp.status(),
+                    resp.status().canonical_reason()
+                );
+            }
+        }
+        Err(e) => {
+            error!("Error: {}", e);
+        }
+    };
+}
 
 fn send_messages(
     irc_bc: &BotConfig,
@@ -85,27 +106,7 @@ fn send_messages(
 ) {
     for t in irc_bc.tags.iter() {
         if message_text.to_lowercase().contains(&t.tag) {
-            let client = reqwest::blocking::Client::new();
-            match client
-                .post(&t.webhook)
-                .json(&msg(sender.login.clone(), message_text.clone()))
-                .send()
-            {
-                Ok(resp) => {
-                    if resp.status().is_success() {
-                        // TODO: nothing?
-                    } else {
-                        error!(
-                            "Error: Code: {} Reason: {:?}",
-                            resp.status(),
-                            resp.status().canonical_reason()
-                        );
-                    }
-                }
-                Err(e) => {
-                    error!("Error: {}", e);
-                }
-            };
+            send_message(&t.webhook, sender.login.clone(), message_text.clone());
         }
     }
 }
@@ -153,9 +154,25 @@ async fn handle_message(
         }) => {
             if message_text.to_lowercase() == "#deactivate" && is_mod(&badges) {
                 info!("deactivated");
+                let mut bc = irc_bc.write().unwrap();
+                if !bc.log_webhook.is_empty() {
+                    send_message(
+                        &bc.log_webhook,
+                        "Askbot".to_string(),
+                        "deactivated".to_string(),
+                    );
+                }
                 *activated = false;
             } else if message_text.to_lowercase() == "#activate" && is_mod(&badges) {
                 *activated = true;
+                let mut bc = irc_bc.write().unwrap();
+                if !bc.log_webhook.is_empty() {
+                    send_message(
+                        &bc.log_webhook,
+                        "Askbot".to_string(),
+                        "activated".to_string(),
+                    );
+                }
                 info!("activated");
             } else if *activated {
                 send_messages(&irc_bc.read().unwrap(), message_text, &sender);
@@ -169,7 +186,9 @@ async fn handle_message(
             let mut reply = None;
             {
                 let mut bc = irc_bc.write().unwrap();
-                if bc.mods.iter().any(|m| *m == login) || login == bc.channel {
+                if !bc.mods.is_empty()
+                    && (bc.mods.iter().any(|m| *m == login) || login == bc.channel)
+                {
                     match parse_whisper(&bc, &login, message_text) {
                         Whisper::Add(tag, webhook) => {
                             let new_tag = Tag {
@@ -211,6 +230,12 @@ async fn handle_message(
                 }
             }
             if let Some((c, u, m)) = reply {
+                {
+                    let mut bc = irc_bc.write().unwrap();
+                    if !bc.log_webhook.is_empty() {
+                        send_message(&bc.log_webhook, "Askbot".to_string(), m.clone());
+                    }
+                }
                 privmsg(c, &ircclient, format!("/w {} \"{}\"", u, m)).await;
             }
         }
@@ -239,9 +264,14 @@ pub async fn main() -> Result<(), std::io::Error> {
             #[cfg(feature = "webfrontend")]
             let config_file2 = config_file.clone();
             #[cfg(feature = "webfrontend")]
-            let rocket_handle = tokio::spawn(async move {
-                web::rocket_main(rocket_bc, config_file2.to_string());
-            });
+            let rocket_handle = if !main_bc.read().unwrap().key.is_empty() {
+                info!("start webfrontend");
+                Some(tokio::spawn(async move {
+                    web::rocket_main(rocket_bc, config_file2.to_string());
+                }))
+            } else {
+                None
+            };
 
             let config = ClientConfig::new_simple(StaticLoginCredentials::new(
                 main_bc.read().unwrap().username.clone(),
@@ -269,7 +299,10 @@ pub async fn main() -> Result<(), std::io::Error> {
             join_handle.await.expect("");
 
             #[cfg(feature = "webfrontend")]
-            rocket_handle.await.expect("");
+            if let Some(handle) = rocket_handle {
+                println!("Wait for webfrontend");
+                handle.await.expect("");
+            }
         }
         Err(e) => error!("Error: {}", e),
     }
