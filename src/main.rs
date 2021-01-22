@@ -51,6 +51,20 @@ pub struct BotConfig {
     mods: Vec<String>,
     #[serde(default)]
     log_webhook: String,
+    #[serde(default)]
+    response_message_success: String,
+    #[serde(default)]
+    response_message_failure: String,
+}
+
+async fn say<T>(
+    channel: String,
+    client: &twitch_irc::TwitchIRCClient<TCPTransport, StaticLoginCredentials>,
+    msg: T,
+) where
+    T: Into<String>,
+{
+    let r = client.say(channel, msg.into()).await;
 }
 
 async fn privmsg<T>(
@@ -79,12 +93,12 @@ fn is_mod(badges: &[twitch_irc::message::Badge]) -> bool {
         .iter()
         .any(|b| b.name == "moderator" || b.name == "broadcaster")
 }
-fn send_message(webhook: &str, sender: String, text: String) {
+fn send_message(webhook: &str, sender: String, text: String) -> bool {
     let client = reqwest::blocking::Client::new();
     match client.post(webhook).json(&msg(sender, text)).send() {
         Ok(resp) => {
             if resp.status().is_success() {
-                // TODO: nothing?
+                return true;
             } else {
                 error!(
                     "Error: Code: {} Reason: {:?}",
@@ -97,17 +111,41 @@ fn send_message(webhook: &str, sender: String, text: String) {
             error!("Error: {}", e);
         }
     };
+    return false;
 }
 
-fn send_messages(
-    irc_bc: &BotConfig,
+async fn send_messages(
+    irc_bc: &Arc<RwLock<BotConfig>>,
     message_text: String,
     sender: &twitch_irc::message::TwitchUserBasics,
+    client: &twitch_irc::TwitchIRCClient<TCPTransport, StaticLoginCredentials>,
 ) {
-    for t in irc_bc.tags.iter() {
-        if message_text.to_lowercase().contains(&t.tag) {
-            send_message(&t.webhook, sender.login.clone(), message_text.clone());
+    let mut success = true;
+    {
+        let bc = irc_bc.read().unwrap();
+        for t in bc.tags.iter() {
+            if message_text.to_lowercase().contains(&t.tag) {
+                success =
+                    success && send_message(&t.webhook, sender.login.clone(), message_text.clone());
+            }
         }
+    }
+    let mut message: (String, String) = ("".to_string(), "".to_string());
+    {
+        let bc = irc_bc.read().unwrap();
+        if success {
+            message = (bc.response_message_success.clone(), bc.channel.clone());
+        } else {
+            message = (bc.response_message_failure.clone(), bc.channel.clone());
+        }
+    }
+    if !message.0.is_empty() {
+        say(
+            message.1,
+            client,
+            format!("@{}: {}", &sender.login, message.0),
+        )
+        .await;
     }
 }
 
@@ -154,7 +192,7 @@ async fn handle_message(
         }) => {
             if message_text.to_lowercase() == "#deactivate" && is_mod(&badges) {
                 info!("deactivated");
-                let mut bc = irc_bc.write().unwrap();
+                let bc = irc_bc.write().unwrap();
                 if !bc.log_webhook.is_empty() {
                     send_message(
                         &bc.log_webhook,
@@ -165,7 +203,7 @@ async fn handle_message(
                 *activated = false;
             } else if message_text.to_lowercase() == "#activate" && is_mod(&badges) {
                 *activated = true;
-                let mut bc = irc_bc.write().unwrap();
+                let bc = irc_bc.write().unwrap();
                 if !bc.log_webhook.is_empty() {
                     send_message(
                         &bc.log_webhook,
@@ -175,7 +213,7 @@ async fn handle_message(
                 }
                 info!("activated");
             } else if *activated {
-                send_messages(&irc_bc.read().unwrap(), message_text, &sender);
+                send_messages(irc_bc, message_text, &sender, ircclient).await;
             }
         }
         twitch_irc::message::ServerMessage::Whisper(twitch_irc::message::WhisperMessage {
@@ -231,7 +269,7 @@ async fn handle_message(
             }
             if let Some((c, u, m)) = reply {
                 {
-                    let mut bc = irc_bc.write().unwrap();
+                    let bc = irc_bc.write().unwrap();
                     if !bc.log_webhook.is_empty() {
                         send_message(&bc.log_webhook, "Askbot".to_string(), m.clone());
                     }
