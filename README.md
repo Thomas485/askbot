@@ -1,5 +1,5 @@
 # askbot
-A simple bot to collect twitch-chat messages in discord channels via (hash)tags.
+A simple bot to collect twitch-chat messages in discord channels using (hash)tags.
 
 ### Usage
 Just change the config.json file to your needs and start the bot:
