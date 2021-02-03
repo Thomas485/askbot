@@ -55,6 +55,8 @@ pub struct BotConfig {
     response_message_success: String,
     #[serde(default)]
     response_message_failure: String,
+    #[serde(default)]
+    ignore: Vec<String>,
 }
 
 async fn say<T>(
@@ -194,7 +196,14 @@ async fn handle_message(
             badges,
             ..
         }) => {
-            if message_text.to_lowercase() == "#deactivate" && is_mod(&badges) {
+            if irc_bc
+                .read()
+                .unwrap()
+                .ignore
+                .iter()
+                .any(|s| s.to_lowercase() == sender.login.to_lowercase())
+            {
+            } else if message_text.to_lowercase() == "#deactivate" && is_mod(&badges) {
                 info!("deactivated");
                 let bc = irc_bc.write().unwrap();
                 if !bc.log_webhook.is_empty() {
