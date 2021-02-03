@@ -64,7 +64,9 @@ async fn say<T>(
 ) where
     T: Into<String>,
 {
-    let r = client.say(channel, msg.into()).await;
+    if let Err(e) = client.say(channel, msg.into()).await {
+        error!("Error: {}", e);
+    }
 }
 
 async fn privmsg<T>(
@@ -120,6 +122,7 @@ async fn send_messages(
     sender: &twitch_irc::message::TwitchUserBasics,
     client: &twitch_irc::TwitchIRCClient<TCPTransport, StaticLoginCredentials>,
 ) {
+    let mut sended = false;
     let mut success = true;
     {
         let bc = irc_bc.read().unwrap();
@@ -127,11 +130,12 @@ async fn send_messages(
             if message_text.to_lowercase().contains(&t.tag) {
                 success =
                     success && send_message(&t.webhook, sender.login.clone(), message_text.clone());
+                sended = true;
             }
         }
     }
     let mut message: (String, String) = ("".to_string(), "".to_string());
-    {
+    if sended {
         let bc = irc_bc.read().unwrap();
         if success {
             message = (bc.response_message_success.clone(), bc.channel.clone());
