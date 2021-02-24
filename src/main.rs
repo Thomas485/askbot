@@ -305,7 +305,6 @@ pub async fn main() -> Result<(), std::io::Error> {
     let mut config_file = "config.json".to_string();
     if args.len() == 2 {
         if args[1].to_lowercase() == "generate" {
-            println!("ghfgh");
             return generate::generate();
         } else {
             config_file = args[1].to_string();
