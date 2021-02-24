@@ -18,6 +18,8 @@ extern crate rocket;
 #[cfg(feature = "webfrontend")]
 mod web;
 
+mod generate;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Msg {
     username: String,
@@ -44,6 +46,7 @@ pub struct BotConfig {
     channel: String,
     username: String,
     oauth_token: String,
+    #[serde(default)]
     tags: Vec<Tag>,
     #[serde(default)]
     key: String,
@@ -301,7 +304,12 @@ pub async fn main() -> Result<(), std::io::Error> {
     let args = std::env::args().collect::<Vec<_>>();
     let mut config_file = "config.json".to_string();
     if args.len() == 2 {
-        config_file = args[1].to_string();
+        if args[1].to_lowercase() == "generate" {
+            println!("ghfgh");
+            return generate::generate();
+        } else {
+            config_file = args[1].to_string();
+        }
     }
     info!("Use config file: {:#?}", config_file);
 
