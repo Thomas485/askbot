@@ -88,18 +88,26 @@ pub fn read_config(config_file: &str) -> std::result::Result<BotConfig, serde_an
     serde_any::from_file(config_file)
 }
 
-pub fn write_config(
-    config_file: &str,
-    bc: &BotConfig,
-) -> std::result::Result<(), serde_any::Error> {
-    serde_any::to_file_pretty(config_file, bc)
+pub fn write_config_logged(config_file: &str, bc: &BotConfig) {
+    match serde_any::to_file_pretty(config_file, bc) {
+        Ok(()) => (),
+        Err(e) => error!("Can't write config file {}: {}", config_file, e),
+    }
 }
+
+//pub fn write_config(
+//    config_file: &str,
+//    bc: &BotConfig,
+//) -> std::result::Result<(), serde_any::Error> {
+//    serde_any::to_file_pretty(config_file, bc)
+//}
 
 fn is_mod(badges: &[twitch_irc::message::Badge]) -> bool {
     badges
         .iter()
         .any(|b| b.name == "moderator" || b.name == "broadcaster")
 }
+
 fn send_message(webhook: &str, sender: String, text: String) -> bool {
     let client = reqwest::blocking::Client::new();
     match client.post(webhook).json(&msg(sender, text)).send() {
@@ -185,6 +193,68 @@ fn join_tags(ts: &[Tag]) -> String {
         .join(", ")
 }
 
+fn sender_is_ignored(irc_bc: &Arc<RwLock<BotConfig>>, sender: &str) -> bool {
+    irc_bc
+        .read()
+        .unwrap()
+        .ignore
+        .iter()
+        .any(|s| s.to_lowercase() == sender.to_lowercase())
+}
+
+fn handle_whisper(
+    irc_bc: &Arc<RwLock<BotConfig>>,
+    login: String,
+    message_text: String,
+    config_file: &str,
+) -> Option<(String, String, String)> {
+    let mut bc = irc_bc.write().unwrap();
+    if !bc.mods.is_empty() && (bc.mods.iter().any(|m| *m == login) || login == bc.channel) {
+        match parse_whisper(&bc, &login, message_text) {
+            Whisper::Add(tag, webhook) => {
+                let new_tag = Tag {
+                    tag: tag.clone(),
+                    webhook,
+                };
+                bc.tags.push(new_tag);
+                write_config_logged(&config_file, &bc);
+                info!("Tag added: {}", &tag);
+                return Some((
+                    bc.channel.clone(),
+                    login.clone(),
+                    format!("Tag added: {}", tag),
+                ));
+            }
+            Whisper::Remove(tag) => {
+                let tmp_tag = tag.clone();
+                if let Some(pos) = bc.tags.iter().position(|x| *x.tag == tmp_tag) {
+                    bc.tags.remove(pos);
+                }
+                write_config_logged(&config_file, &bc);
+                info!("Tag removed: {}", &tag);
+                return Some((
+                    bc.channel.clone(),
+                    login.clone(),
+                    format!("Tag removed: {}", tag),
+                ));
+            }
+            Whisper::List => {
+                info!("List Tags");
+                return Some((
+                    bc.channel.clone(),
+                    login.clone(),
+                    format!("Tags: {}", join_tags(&bc.tags)),
+                ));
+            }
+            Whisper::Nothing => {
+                info!("Whisper ignored");
+                return None;
+            }
+        }
+    }
+    return None;
+}
+
 async fn handle_message(
     ircclient: &Arc<TwitchIRCClient<TCPTransport, StaticLoginCredentials>>,
     config_file: &String,
@@ -199,34 +269,15 @@ async fn handle_message(
             badges,
             ..
         }) => {
-            if irc_bc
-                .read()
-                .unwrap()
-                .ignore
-                .iter()
-                .any(|s| s.to_lowercase() == sender.login.to_lowercase())
-            {
+            if sender_is_ignored(irc_bc, &sender.login) {
+                return;
             } else if message_text.to_lowercase() == "#deactivate" && is_mod(&badges) {
                 info!("deactivated");
-                let bc = irc_bc.write().unwrap();
-                if !bc.log_webhook.is_empty() {
-                    send_message(
-                        &bc.log_webhook,
-                        "Askbot".to_string(),
-                        "deactivated".to_string(),
-                    );
-                }
+                log_on_discord(irc_bc, &"deactivated".to_string());
                 *activated = false;
             } else if message_text.to_lowercase() == "#activate" && is_mod(&badges) {
                 *activated = true;
-                let bc = irc_bc.write().unwrap();
-                if !bc.log_webhook.is_empty() {
-                    send_message(
-                        &bc.log_webhook,
-                        "Askbot".to_string(),
-                        "activated".to_string(),
-                    );
-                }
+                log_on_discord(irc_bc, &"activated".to_string());
                 info!("activated");
             } else if *activated {
                 send_messages(irc_bc, message_text, &sender, ircclient).await;
@@ -237,63 +288,19 @@ async fn handle_message(
             message_text,
             ..
         }) => {
-            let mut reply = None;
-            {
-                let mut bc = irc_bc.write().unwrap();
-                if !bc.mods.is_empty()
-                    && (bc.mods.iter().any(|m| *m == login) || login == bc.channel)
-                {
-                    match parse_whisper(&bc, &login, message_text) {
-                        Whisper::Add(tag, webhook) => {
-                            let new_tag = Tag {
-                                tag: tag.clone(),
-                                webhook,
-                            };
-                            bc.tags.push(new_tag);
-                            write_config(&config_file, &bc);
-                            reply = Some((
-                                bc.channel.clone(),
-                                login.clone(),
-                                format!("Tag added: {}", &tag),
-                            ));
-                            info!("Tag added: {}", tag);
-                        }
-                        Whisper::Remove(tag) => {
-                            let tmp_tag = tag.clone();
-                            if let Some(pos) = bc.tags.iter().position(|x| *x.tag == tmp_tag) {
-                                bc.tags.remove(pos);
-                            }
-                            write_config(&config_file, &bc);
-                            reply = Some((
-                                bc.channel.clone(),
-                                login.clone(),
-                                format!("Tag removed: {}", &tag),
-                            ));
-                            info!("Tag removed: {}", tag);
-                        }
-                        Whisper::List => {
-                            reply = Some((
-                                bc.channel.clone(),
-                                login.clone(),
-                                format!("Tags: {}", join_tags(&bc.tags)),
-                            ));
-                            info!("List Tags");
-                        }
-                        Whisper::Nothing => info!("Whisper ignored"),
-                    }
-                }
-            }
-            if let Some((c, u, m)) = reply {
-                {
-                    let bc = irc_bc.write().unwrap();
-                    if !bc.log_webhook.is_empty() {
-                        send_message(&bc.log_webhook, "Askbot".to_string(), m.clone());
-                    }
-                }
+            if let Some((c, u, m)) = handle_whisper(irc_bc, login, message_text, config_file) {
+                log_on_discord(irc_bc, &m);
                 privmsg(c, &ircclient, format!("/w {} \"{}\"", u, m)).await;
             }
         }
         _ => (),
+    }
+}
+
+fn log_on_discord(irc_bc: &Arc<RwLock<BotConfig>>, message: &String) {
+    let bc = irc_bc.write().unwrap();
+    if !bc.log_webhook.is_empty() {
+        send_message(&bc.log_webhook, "Askbot".to_string(), message.to_string());
     }
 }
 

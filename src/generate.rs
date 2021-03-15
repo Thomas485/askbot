@@ -4,7 +4,7 @@ use log::{debug, error, info, warn};
 use std::io::Write;
 use std::path::Path;
 
-use crate::{write_config, BotConfig, Tag};
+use crate::{write_config_logged, BotConfig, Tag};
 
 fn prompt(p: &str) -> Result<String, std::io::Error> {
     let res = prompt_or_empty(p)?;
@@ -164,7 +164,7 @@ fn prompt_writing(file: String, config: BotConfig) -> Result<(), std::io::Error>
         false,
     )? {
         if !Path::new(&file).exists() || prompt_boolean("File already exists, overwrite?", false)? {
-            write_config(&file, &config);
+            write_config_logged(&file, &config);
         } else {
             println!("abort");
         }
