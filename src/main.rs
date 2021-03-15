@@ -273,11 +273,11 @@ async fn handle_message(
                 return;
             } else if message_text.to_lowercase() == "#deactivate" && is_mod(&badges) {
                 info!("deactivated");
-                log_on_discord(irc_bc, &"deactivated".to_string());
+                log_on_discord(irc_bc, "deactivated");
                 *activated = false;
             } else if message_text.to_lowercase() == "#activate" && is_mod(&badges) {
                 *activated = true;
-                log_on_discord(irc_bc, &"activated".to_string());
+                log_on_discord(irc_bc, "activated");
                 info!("activated");
             } else if *activated {
                 send_messages(irc_bc, message_text, &sender, ircclient).await;
@@ -297,7 +297,7 @@ async fn handle_message(
     }
 }
 
-fn log_on_discord(irc_bc: &Arc<RwLock<BotConfig>>, message: &String) {
+fn log_on_discord(irc_bc: &Arc<RwLock<BotConfig>>, message: &str) {
     let bc = irc_bc.write().unwrap();
     if !bc.log_webhook.is_empty() {
         send_message(&bc.log_webhook, "Askbot".to_string(), message.to_string());
