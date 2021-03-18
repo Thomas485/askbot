@@ -82,6 +82,10 @@ async fn privmsg<T>(
     T: Into<String>,
 {
     let r = client.privmsg(channel, msg.into()).await;
+    match r {
+        Ok(_) => (),
+        Err(e) => error!("{}", e),
+    };
 }
 
 pub fn read_config(config_file: &str) -> std::result::Result<BotConfig, serde_any::Error> {
@@ -94,13 +98,6 @@ pub fn write_config_logged(config_file: &str, bc: &BotConfig) {
         Err(e) => error!("Can't write config file {}: {}", config_file, e),
     }
 }
-
-//pub fn write_config(
-//    config_file: &str,
-//    bc: &BotConfig,
-//) -> std::result::Result<(), serde_any::Error> {
-//    serde_any::to_file_pretty(config_file, bc)
-//}
 
 fn is_mod(badges: &[twitch_irc::message::Badge]) -> bool {
     badges
