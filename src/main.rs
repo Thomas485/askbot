@@ -323,9 +323,7 @@ pub async fn main() -> Result<(), std::io::Error> {
             let rocket_bc = Arc::clone(&main_bc);
             let irc_bc = Arc::clone(&main_bc);
 
-            #[cfg(feature = "webfrontend")]
             let config_file2 = config_file.clone();
-            #[cfg(feature = "webfrontend")]
             let rocket_handle = if !main_bc.read().unwrap().key.is_empty() {
                 info!("start webfrontend");
                 Some(tokio::spawn(async move {
@@ -358,12 +356,10 @@ pub async fn main() -> Result<(), std::io::Error> {
             let channel = main_bc.read().unwrap().channel.clone();
             irc_client_main.join(channel.clone());
 
-            join_handle.await.expect("");
-
-            #[cfg(feature = "webfrontend")]
             if let Some(handle) = rocket_handle {
-                println!("Wait for webfrontend");
-                handle.await.expect("");
+                tokio::join![join_handle, handle];
+            } else {
+                tokio::join![join_handle];
             }
         }
         Err(e) => error!("Error: {}", e),

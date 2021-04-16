@@ -11,12 +11,12 @@ serde_json = "*"
 serde_any = "*"
 twitch-irc = "*"
 tokio = "*"
-futures = "*"
 log = "*"
 env_logger = "*"
 rocket = { version="*", optional = true }
-#base64 = { version="*", optional = true }
+rocket_session = { version="*", optional = true}
+rocket_contrib = { version="*", optional = true, features=["json"]}
 
 [features]
 default = []
-webfrontend = ["rocket"]
+webfrontend = ["rocket","rocket_session","rocket_contrib"]
