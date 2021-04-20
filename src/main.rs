@@ -35,7 +35,7 @@ fn msg(username: String, content: String) -> Msg {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Tag {
     tag: String,
     webhook: String,
