@@ -1,0 +1,25 @@
+{
+  "channel": "…",
+  "username": "…",
+  "oauth_token": "…",
+  "tags": [
+    {
+      "tag": "#test1",
+      "webhook": "test-hook"
+    },
+    {
+      "tag": "#test2",
+      "webhook": "test2-hook"
+    },
+    {
+      "tag": "#test3",
+      "webhook": "test3-hook"
+    }
+  ],
+  "key": "foo",
+  "mods": [],
+  "log_webhook": "",
+  "response_message_success": "",
+  "response_message_failure": "",
+  "ignore": []
+}

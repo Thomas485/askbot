@@ -203,3 +203,167 @@ pub fn rocket(bc: Arc<RwLock<BotConfig>>, config_file: String) -> rocket::Rocket
 pub fn rocket_main(bc: Arc<RwLock<BotConfig>>, config_file: String) {
     rocket(bc, config_file).launch();
 }
+
+#[cfg(test)]
+mod test {
+    use super::rocket;
+    use rocket::http::Status;
+    use rocket::local::Client;
+    use std::sync::{Arc, RwLock};
+
+    fn prepare_client() -> rocket::local::Client {
+        match crate::read_config("testconfig.json") {
+            Ok(bc) => {
+                let test_bc = Arc::new(RwLock::new(bc));
+                return Client::new(rocket(test_bc, "testconfig.json".to_string()))
+                    .expect("valid rocket instance");
+            }
+            Err(e) => panic!("{}", e),
+        }
+    }
+    fn prepare_client_bc() -> (rocket::local::Client, Arc<RwLock<crate::BotConfig>>) {
+        match crate::read_config("testconfig.json") {
+            Ok(bc) => {
+                let test_bc = Arc::new(RwLock::new(bc));
+                return (
+                    Client::new(rocket(Arc::clone(&test_bc), "testconfig.json".to_string()))
+                        .expect("valid rocket instance"),
+                    test_bc,
+                );
+            }
+            Err(e) => panic!("{}", e),
+        }
+    }
+
+    fn do_login(client: &mut rocket::local::Client) {
+        client
+            .post("/login")
+            .header(rocket::http::ContentType::JSON)
+            .body("{\"key\": \"foo\"}")
+            .dispatch();
+    }
+
+    #[test]
+    fn login() {
+        let client = prepare_client();
+
+        // not logged in.
+        let response = client.post("/login").dispatch();
+        // NotFound because the key is mandatory.
+        // Should be fine.
+        assert_eq!(response.status(), Status::NotFound);
+
+        // wrong login
+        let response = client
+            .post("/login")
+            .header(rocket::http::ContentType::JSON)
+            .body("{\"key\": \"wrong\"}")
+            .dispatch();
+        assert_eq!(response.status(), Status::Forbidden);
+
+        // login
+        let mut response = client
+            .post("/login")
+            .header(rocket::http::ContentType::JSON)
+            .body("{\"key\": \"foo\"}")
+            .dispatch();
+        assert_eq!(response.status(), Status::Ok);
+        assert_eq!(response.body_string(), None);
+    }
+
+    #[test]
+    fn get_tags() {
+        let (mut client, bc) = prepare_client_bc();
+
+        do_login(&mut client);
+
+        let mut response = client.get("/tags/").dispatch();
+        assert_eq!(response.status(), Status::Ok);
+        // response data == server data
+        assert_eq!(
+            response.body_string().map(|mut s| s
+                .drain(..)
+                .filter(|c| *c != '\n' && *c != ' ')
+                .collect::<String>()),
+            serde_json::to_string(&bc.read().unwrap().tags).ok()
+        );
+    }
+
+    #[test]
+    fn add_tag() {
+        let (mut client, bc) = prepare_client_bc();
+
+        do_login(&mut client);
+
+        let old_count = bc.read().unwrap().tags.len();
+        let mut response = client
+            .post("/tags/add")
+            .header(rocket::http::ContentType::JSON)
+            .body(
+                rocket_contrib::json!({
+                    "tag": format!("#test{}",old_count+1),
+                    "webhook": format!("test{}-hook",old_count+1)
+                })
+                .to_string(),
+            )
+            .dispatch();
+        assert_eq!(response.status(), Status::Created);
+        assert_eq!(response.body_string(), None);
+        let new_count = bc.read().unwrap().tags.len();
+        assert_eq!(new_count, old_count + 1);
+    }
+
+    #[test]
+    fn delete_tag() {
+        let (mut client, bc) = prepare_client_bc();
+        do_login(&mut client);
+
+        // get old data
+        let old_count = bc.read().unwrap().tags.len();
+        assert!(old_count > 0);
+        let old_tag = bc.read().unwrap().tags[old_count - 1].clone();
+
+        // delete
+        let mut response = client.delete(format!("/tags/{}", old_count - 1)).dispatch();
+        assert_eq!(response.status(), Status::Ok);
+
+        // check
+        let new_count = bc.read().unwrap().tags.len();
+        assert_eq!(new_count, old_count - 1);
+    }
+
+    #[test]
+    fn update_tag() {
+        let (mut client, bc) = prepare_client_bc();
+        do_login(&mut client);
+
+        // get old data
+        let old_count = bc.read().unwrap().tags.len();
+        assert!(old_count > 0);
+        let mut old_tag = bc.read().unwrap().tags[0].clone();
+
+        let mut new_tag = old_tag.clone();
+        let number = old_tag.tag.split_off(5).parse::<i32>().unwrap();
+        new_tag.tag = format!("#test{}", (number + 1) % 100);
+
+        // update
+        let mut response = client
+            .put(format!("/tags/{}", 0))
+            .header(rocket::http::ContentType::JSON)
+            .body(
+                rocket_contrib::json!({
+                    "tag": new_tag.tag,
+                    "webhook": new_tag.webhook
+                })
+                .to_string(),
+            )
+            .dispatch();
+        assert_eq!(response.status(), Status::Ok);
+
+        // check
+        let new_count = bc.read().unwrap().tags.len();
+        assert_eq!(new_count, old_count);
+        let updated_tag = bc.read().unwrap().tags[0].clone();
+        assert_eq!(new_tag, updated_tag);
+    }
+}
