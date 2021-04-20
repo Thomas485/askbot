@@ -326,6 +326,8 @@ pub async fn main() -> Result<(), std::io::Error> {
             let irc_bc = Arc::clone(&main_bc);
 
             let config_file2 = config_file.clone();
+            let rocket_handle: Option<tokio::task::JoinHandle<()>> = None;
+            #[cfg(feature = "webfrontend")]
             let rocket_handle = if !main_bc.read().unwrap().key.is_empty() {
                 info!("start webfrontend");
                 Some(tokio::spawn(async move {
