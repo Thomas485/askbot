@@ -137,6 +137,9 @@ async fn send_messages(
     {
         let bc = irc_bc.read().unwrap();
         for t in bc.tags.iter() {
+            if t.tag.is_empty() {
+                continue;
+            }
             let text_lower = message_text.to_lowercase();
             // TODO: avoiding clone?
             if text_lower.contains(&(t.tag.clone() + " ")) || text_lower.ends_with(&t.tag) {
