@@ -389,7 +389,11 @@ messageListHead =
 
 messageRow i msg =
     Table.tr []
-        [ Table.td [] [ text msg.name ]
+        [ Table.td []
+            [ Html.label
+                [ attribute "for" msg.name ]
+                [ text msg.name ]
+            ]
         , Table.td []
             [ Input.text
                 [ Input.id msg.name
@@ -436,6 +440,7 @@ mainPanel model =
 
 loginScreen model =
     [ Html.h2 [] [ text "Login:" ]
+    , Html.label [ attribute "for" "key" ] [ text "Key:" ]
     , Input.text
         [ Input.id "key"
         , Input.value model.loginKey
