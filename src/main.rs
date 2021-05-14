@@ -46,18 +46,25 @@ pub struct BotConfig {
     channel: String,
     username: String,
     oauth_token: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(default)]
     tags: Vec<Tag>,
+    #[serde(skip_serializing_if = "String::is_empty")]
     #[serde(default)]
     key: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(default)]
     mods: Vec<String>,
+    #[serde(skip_serializing_if = "String::is_empty")]
     #[serde(default)]
     log_webhook: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
     #[serde(default)]
     response_message_success: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
     #[serde(default)]
     response_message_failure: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(default)]
     ignore: Vec<String>,
 }
