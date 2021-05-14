@@ -67,16 +67,28 @@ pub struct BotConfig {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(default)]
     ignore: Vec<String>,
+    #[serde(skip_serializing_if = "bool_id")]
+    #[serde(default = "bool_true")]
+    use_reply: bool,
 }
 
-async fn say<T>(
+fn bool_id(a: &bool) -> bool {
+    *a
+}
+
+fn bool_true() -> bool {
+    true
+}
+
+async fn say_in_response<T>(
     channel: String,
     client: &twitch_irc::TwitchIRCClient<TCPTransport, StaticLoginCredentials>,
     msg: T,
+    reply_to: Option<String>,
 ) where
     T: Into<String>,
 {
-    if let Err(e) = client.say(channel, msg.into()).await {
+    if let Err(e) = client.say_in_response(channel, msg.into(), reply_to).await {
         error!("Error: {}", e);
     }
 }
@@ -138,6 +150,7 @@ async fn send_messages(
     message_text: String,
     sender: &twitch_irc::message::TwitchUserBasics,
     client: &twitch_irc::TwitchIRCClient<TCPTransport, StaticLoginCredentials>,
+    message_id: String,
 ) {
     let mut sended = false;
     let mut success = true;
@@ -166,12 +179,18 @@ async fn send_messages(
         }
     }
     if !message.0.is_empty() {
-        say(
-            message.1,
-            client,
-            format!("@{}: {}", &sender.login, message.0),
-        )
-        .await;
+        let mut reply = true;
+        {
+            let bc = irc_bc.read().unwrap();
+            reply = bc.use_reply;
+        }
+        let msg = if reply {
+            message.0
+        } else {
+            format!("@{}: {}", &sender.login, message.0)
+        };
+        let reply_id = if reply { Some(message_id) } else { None };
+        say_in_response(message.1, client, msg, reply_id).await;
     }
 }
 
@@ -274,6 +293,7 @@ async fn handle_message(
     match message {
         twitch_irc::message::ServerMessage::Privmsg(twitch_irc::message::PrivmsgMessage {
             message_text,
+            message_id,
             sender,
             badges,
             ..
@@ -289,7 +309,7 @@ async fn handle_message(
                 log_on_discord(irc_bc, "activated");
                 info!("activated");
             } else if *activated {
-                send_messages(irc_bc, message_text, &sender, ircclient).await;
+                send_messages(irc_bc, message_text, &sender, ircclient, message_id).await;
             }
         }
         twitch_irc::message::ServerMessage::Whisper(twitch_irc::message::WhisperMessage {

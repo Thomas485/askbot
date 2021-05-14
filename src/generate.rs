@@ -64,6 +64,10 @@ pub fn generate() -> Result<(), std::io::Error> {
     let (response_message_success, response_message_failure) = prompt_response_messages()?;
     let ignore = prompt_ignore_list(&username)?;
     let tags = prompt_tags()?;
+    let use_reply = prompt_boolean(
+        "Do you want to use the reply functionality (instead of \"@username\")",
+        true,
+    )?;
 
     //#[cfg(feature = "webfrontend")]
     //if prompt_boolean("Do you want to the webfrontend to manage tags?", false)? {}
@@ -79,6 +83,7 @@ pub fn generate() -> Result<(), std::io::Error> {
         response_message_failure,
         ignore,
         tags,
+        use_reply,
     };
 
     info!("Generated config: {:#?}", config);
