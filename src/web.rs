@@ -16,7 +16,7 @@ fn logged_in(session: &Session) -> bool {
 }
 
 #[get("/?<key>")]
-fn index(session: Session, key: Option<String>) -> Result<NamedFile, status::Custom<String>> {
+fn index(_session: Session, key: Option<String>) -> Result<NamedFile, status::Custom<String>> {
     NamedFile::open("index.html").map_err(|e| Custom(Status::NotFound, e.to_string()))
 }
 
@@ -83,7 +83,7 @@ fn delete_tag(
 ) -> Status {
     let mut t = bc.write().unwrap();
     if logged_in(&session) && id < t.tags.len() {
-        let tag = t.tags.remove(id);
+        let _ = t.tags.remove(id);
         write_config_logged(&config_file, &t);
         Status::Ok
     } else {
@@ -120,7 +120,7 @@ fn get_message(
     session: Session,
     name: String,
     bc: rocket::State<'_, Arc<RwLock<BotConfig>>>,
-    config_file: rocket::State<String>,
+    _config_file: rocket::State<String>,
 ) -> Result<Json<Message>, Status> {
     if logged_in(&session) {
         let t = bc.read().unwrap();
@@ -146,7 +146,7 @@ fn set_message(
     name: String,
     msg: Json<String>,
     bc: rocket::State<'_, Arc<RwLock<BotConfig>>>,
-    config_file: rocket::State<String>,
+    _config_file: rocket::State<String>,
 ) -> Status {
     if logged_in(&session) {
         let mut t = bc.write().unwrap();
@@ -171,7 +171,7 @@ fn set_message(
 fn get_messages(
     session: Session,
     bc: rocket::State<'_, Arc<RwLock<BotConfig>>>,
-    config_file: rocket::State<String>,
+    _config_file: rocket::State<String>,
 ) -> Result<Json<Vec<Message>>, Status> {
     if logged_in(&session) {
         let t = bc.read().unwrap();
@@ -321,10 +321,9 @@ mod test {
         // get old data
         let old_count = bc.read().unwrap().tags.len();
         assert!(old_count > 0);
-        let old_tag = bc.read().unwrap().tags[old_count - 1].clone();
 
         // delete
-        let mut response = client.delete(format!("/tags/{}", old_count - 1)).dispatch();
+        let response = client.delete(format!("/tags/{}", old_count - 1)).dispatch();
         assert_eq!(response.status(), Status::Ok);
 
         // check
@@ -347,7 +346,7 @@ mod test {
         new_tag.tag = format!("#test{}", (number + 1) % 100);
 
         // update
-        let mut response = client
+        let response = client
             .put(format!("/tags/{}", 0))
             .header(rocket::http::ContentType::JSON)
             .body(
