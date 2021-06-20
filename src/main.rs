@@ -100,8 +100,7 @@ async fn privmsg<T>(
 ) where
     T: Into<String>,
 {
-    let r = client.privmsg(channel, msg.into()).await;
-    match r {
+    match client.privmsg(channel, msg.into()).await {
         Ok(_) => (),
         Err(e) => error!("{}", e),
     };
@@ -142,7 +141,7 @@ fn send_message(webhook: &str, sender: String, text: String) -> bool {
             error!("Error: {}", e);
         }
     };
-    return false;
+    false
 }
 
 async fn send_messages(
@@ -179,11 +178,10 @@ async fn send_messages(
         }
     }
     if !message.0.is_empty() {
-        let mut reply = true;
-        {
+        let reply = {
             let bc = irc_bc.read().unwrap();
-            reply = bc.use_reply;
-        }
+            bc.use_reply
+        };
         let msg = if reply {
             message.0
         } else {
@@ -201,7 +199,7 @@ enum Whisper {
     Nothing,
 }
 
-fn parse_whisper(bc: &BotConfig, login: &String, message_text: String) -> Whisper {
+fn parse_whisper(bc: &BotConfig, login: &str, message_text: String) -> Whisper {
     if bc.mods.iter().any(|m| *m == *login) || *login == bc.channel {
         match message_text.split_whitespace().collect::<Vec<&str>>()[..] {
             ["#list"] => Whisper::List,
@@ -210,7 +208,7 @@ fn parse_whisper(bc: &BotConfig, login: &String, message_text: String) -> Whispe
             _ => Whisper::Nothing,
         }
     } else {
-        return Whisper::Nothing;
+        Whisper::Nothing
     }
 }
 
@@ -280,12 +278,12 @@ fn handle_whisper(
             }
         }
     }
-    return None;
+    None
 }
 
 async fn handle_message(
     ircclient: &Arc<TwitchIRCClient<TCPTransport, StaticLoginCredentials>>,
-    config_file: &String,
+    config_file: &str,
     message: twitch_irc::message::ServerMessage,
     irc_bc: &Arc<RwLock<BotConfig>>,
     activated: &mut bool,

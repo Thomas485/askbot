@@ -9,9 +9,9 @@ use crate::{write_config_logged, BotConfig, Tag};
 fn prompt(p: &str) -> Result<String, std::io::Error> {
     let res = prompt_or_empty(p)?;
     if res.is_empty() {
-        return prompt(p);
+        prompt(p)
     } else {
-        return Ok(res);
+        Ok(res)
     }
 }
 
@@ -29,7 +29,7 @@ fn prompt_list(p: &str) -> Result<Vec<String>, std::io::Error> {
     std::io::stdout().flush()?;
     let mut res = String::new();
     std::io::stdin().read_line(&mut res)?;
-    let v = res.split(",").map(|s| s.trim().to_string()).collect();
+    let v = res.split(',').map(|s| s.trim().to_string()).collect();
     Ok(v)
 }
 
@@ -44,13 +44,13 @@ fn prompt_boolean(p: &str, default: bool) -> Result<bool, std::io::Error> {
     std::io::stdin().read_line(&mut res)?;
     let res = res.trim();
     if res.is_empty() {
-        return Ok(default);
+        Ok(default)
     } else if res == "y" {
-        return Ok(true);
+        Ok(true)
     } else if res == "n" {
-        return Ok(false);
+        Ok(false)
     } else {
-        return prompt_boolean(p, default);
+        prompt_boolean(p, default)
     }
 }
 
@@ -96,9 +96,9 @@ fn prompt_mods() -> Result<Vec<String>, std::io::Error> {
         "Do you want to specify mods, that can configure the bot via pm's?",
         false,
     )? {
-        return prompt_list("mods");
+        prompt_list("mods")
     } else {
-        return Ok(vec![]);
+        Ok(vec![])
     }
 }
 
@@ -128,7 +128,7 @@ fn prompt_log_webhook() -> Result<String, std::io::Error> {
     }
 }
 
-fn prompt_ignore_list(username: &String) -> Result<Vec<String>, std::io::Error> {
+fn prompt_ignore_list(username: &str) -> Result<Vec<String>, std::io::Error> {
     let mut ignore: Vec<String> = vec![];
     if prompt_boolean(
         format!(
