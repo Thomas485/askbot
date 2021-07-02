@@ -16,6 +16,7 @@ env_logger = "*"
 rocket = { version="*", optional = true }
 rocket_session = { version="*", optional = true}
 rocket_contrib = { version="*", optional = true, features=["json"]}
+dialoguer = "*"
 
 [features]
 default = []
