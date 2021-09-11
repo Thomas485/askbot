@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use twitch_irc::login::StaticLoginCredentials;
 use twitch_irc::ClientConfig;
 use twitch_irc::SecureTCPTransport;
-use twitch_irc::TwitchIRCClient;
 
 use std::sync::{Arc, RwLock};
 
