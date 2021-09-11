@@ -154,8 +154,9 @@ async fn send_messages(
                 continue;
             }
             let text_lower = message_text.to_lowercase();
-            // TODO: avoiding clone?
-            if text_lower.contains(&(t.tag.clone() + " ")) || text_lower.ends_with(&t.tag) {
+            if text_lower.contains(&(t.tag.to_lowercase() + " "))
+                || text_lower.ends_with(&t.tag.to_lowercase())
+            {
                 success =
                     success && send_message(&t.webhook, sender.login.clone(), message_text.clone());
                 sended = true;
