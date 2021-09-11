@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use twitch_irc::login::StaticLoginCredentials;
 use twitch_irc::ClientConfig;
-use twitch_irc::TCPTransport;
+use twitch_irc::SecureTCPTransport;
 use twitch_irc::TwitchIRCClient;
 
 use std::sync::{Arc, RwLock};
@@ -19,6 +19,8 @@ extern crate rocket;
 mod web;
 
 mod generate;
+
+type IRCClient = twitch_irc::TwitchIRCClient<SecureTCPTransport, StaticLoginCredentials>;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Msg {
@@ -80,12 +82,8 @@ fn bool_true() -> bool {
     true
 }
 
-async fn say_in_response<T>(
-    channel: String,
-    client: &twitch_irc::TwitchIRCClient<TCPTransport, StaticLoginCredentials>,
-    msg: T,
-    reply_to: Option<String>,
-) where
+async fn say_in_response<T>(channel: String, client: &IRCClient, msg: T, reply_to: Option<String>)
+where
     T: Into<String>,
 {
     if let Err(e) = client.say_in_response(channel, msg.into(), reply_to).await {
@@ -93,11 +91,8 @@ async fn say_in_response<T>(
     }
 }
 
-async fn privmsg<T>(
-    channel: String,
-    client: &twitch_irc::TwitchIRCClient<TCPTransport, StaticLoginCredentials>,
-    msg: T,
-) where
+async fn privmsg<T>(channel: String, client: &IRCClient, msg: T)
+where
     T: Into<String>,
 {
     match client.privmsg(channel, msg.into()).await {
@@ -148,7 +143,7 @@ async fn send_messages(
     irc_bc: &Arc<RwLock<BotConfig>>,
     message_text: String,
     sender: &twitch_irc::message::TwitchUserBasics,
-    client: &twitch_irc::TwitchIRCClient<TCPTransport, StaticLoginCredentials>,
+    client: &IRCClient,
     message_id: String,
 ) {
     let mut sended = false;
@@ -282,7 +277,7 @@ fn handle_whisper(
 }
 
 async fn handle_message(
-    ircclient: &Arc<TwitchIRCClient<TCPTransport, StaticLoginCredentials>>,
+    ircclient: &Arc<IRCClient>,
     config_file: &str,
     message: twitch_irc::message::ServerMessage,
     irc_bc: &Arc<RwLock<BotConfig>>,
@@ -372,8 +367,7 @@ pub async fn main() -> Result<(), std::io::Error> {
 
             let mut activated = true;
 
-            let (mut incoming_messages, ircclient) =
-                TwitchIRCClient::<TCPTransport, StaticLoginCredentials>::new(config);
+            let (mut incoming_messages, ircclient) = IRCClient::new(config);
 
             let irc_client = Arc::new(ircclient);
             let irc_client_main = Arc::clone(&irc_client);
