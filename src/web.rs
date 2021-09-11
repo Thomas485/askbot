@@ -146,7 +146,7 @@ fn set_message(
     name: String,
     msg: Json<String>,
     bc: rocket::State<'_, Arc<RwLock<BotConfig>>>,
-    _config_file: rocket::State<String>,
+    config_file: rocket::State<String>,
 ) -> Status {
     if logged_in(&session) {
         let mut t = bc.write().unwrap();
@@ -154,10 +154,12 @@ fn set_message(
         match name.as_str() {
             "response_message_success" => {
                 t.response_message_success = msg;
+                write_config_logged(&config_file, &t);
                 Status::Created
             }
             "response_message_failure" => {
                 t.response_message_failure = msg;
+                write_config_logged(&config_file, &t);
                 Status::Created
             }
             _ => Status::NotFound,
