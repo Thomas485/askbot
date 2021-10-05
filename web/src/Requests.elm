@@ -1,4 +1,4 @@
-module Requests exposing (..)
+module Requests exposing (delete, get, post, put)
 
 import Http
 

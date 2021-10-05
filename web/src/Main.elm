@@ -1,10 +1,14 @@
 module Main exposing (..)
 
+import Alert
 import Bootstrap.Alert as Alert
 import Bootstrap.Button as Button
 import Bootstrap.ButtonGroup as BG
 import Bootstrap.CDN as CDN
+import Bootstrap.Form.Checkbox as Checkbox
+import Bootstrap.Form.Fieldset as Fieldset
 import Bootstrap.Form.Input as Input
+import Bootstrap.Form.InputGroup as InputGroup
 import Bootstrap.Tab as Tab
 import Bootstrap.Table as Table
 import Browser
@@ -34,6 +38,16 @@ main =
         }
 
 
+type alias Settings =
+    { channel : String
+    , username : String
+    , oauth : String
+    , messageSuccess : String
+    , messageFailure : String
+    , reply : Bool
+    }
+
+
 type alias Model =
     { url : Url.Url
     , base_url : String
@@ -41,9 +55,11 @@ type alias Model =
     , messages : List Message
     , newTag : Tag
     , tabState : Tab.State
-    , alert : Maybe (List (Html Msg))
     , login : Bool
     , loginKey : String
+    , alerts : Alert.Alerts Msg
+    , settings : Settings
+    , credentialsChanged : Bool
     }
 
 
@@ -85,9 +101,17 @@ init _ url _ =
         []
         (Tag.new "" "")
         Tab.initialState
-        Nothing
         False
         loginKey
+        (Alert.new RemoveAlert)
+        { channel = ""
+        , username = ""
+        , oauth = ""
+        , messageSuccess = ""
+        , messageFailure = ""
+        , reply = True
+        }
+        False
     , Requests.post { base_url = base_url } Login "login" <| loginJson loginKey
     )
 
@@ -111,31 +135,16 @@ type Msg
     | TabMsgMain Tab.State
     | UpdateLoginKey String
     | NoMsg
-
-
-alertStyle =
-    [ style "margin" "10px", style "margin-bottom" "0px" ]
-
-
-add_alert : Model -> String -> Maybe (List (Html Msg))
-add_alert model msg =
-    Just <|
-        Alert.simpleDanger alertStyle [ text msg ]
-            :: Maybe.withDefault [] model.alert
-
-
-add_success : Model -> String -> Maybe (List (Html Msg))
-add_success model msg =
-    Just <|
-        Alert.simpleSuccess alertStyle [ text msg ]
-            :: Maybe.withDefault [] model.alert
+    | RemoveAlert Int Alert.Visibility
+    | UpdateSettingsText String String
+    | UpdateSettingsReply Bool
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Login (Ok _) ->
-            ( { model | login = True }
+            ( { model | login = True, alerts = Alert.new model.alerts.alertAction }
             , Cmd.batch
                 [ Requests.get model Tags Tag.decodeList "tags/"
                 , Requests.get model Messages Message.decodeList "messages/"
@@ -143,65 +152,70 @@ update msg model =
             )
 
         Login (Err e) ->
-            ( { model
+            let
+                newModel =
+                    Alert.add model Alert.dismissableAlert <|
+                        "Login failed: "
+                            ++ Error.toString e
+            in
+            ( { newModel
                 | login = False
-                , alert = add_alert model <| "Login failed: " ++ Error.toString e
               }
             , Cmd.none
             )
 
         Tags (Ok ls) ->
-            ( { model | tags = ls, alert = Nothing }
+            ( { model | tags = ls }
             , Cmd.none
             )
 
         Tags (Err e) ->
-            ( { model
-                | alert = add_alert model <| "Can't load tags: " ++ Error.toString e
-              }
+            ( Alert.add model Alert.dismissableAlert <|
+                "Can't load tags: "
+                    ++ Error.toString e
             , Cmd.none
             )
 
         Tag action (Ok _) ->
             let
-                alerts =
-                    add_success model <| Tag.successMessage action
+                newModel =
+                    Alert.add model Alert.dismissableSuccess <| Tag.successMessage action
 
                 tags =
                     Tag.applyAction action model.tags
             in
-            ( { model | tags = tags, alert = alerts }
+            ( { newModel | tags = tags }
             , Cmd.none
             )
 
         Tag action (Err e) ->
-            let
-                alerts =
-                    add_alert model <| Tag.failureMessage action e
-            in
-            ( { model | alert = alerts }
+            ( Alert.add model Alert.dismissableAlert <|
+                Tag.failureMessage action e
             , Cmd.none
             )
 
         Messages (Ok ls) ->
-            ( { model | messages = ls, alert = Nothing }
+            ( { model | messages = ls }
             , Cmd.none
             )
 
         Messages (Err e) ->
-            ( { model
-                | alert = add_alert model <| "Can't load messages: " ++ Error.toString e
-              }
+            ( Alert.add model Alert.dismissableAlert <|
+                "Can't load messages: "
+                    ++ Error.toString e
             , Cmd.none
             )
 
         UpdatedMessage (Ok t) ->
-            ( { model | alert = add_success { model | alert = Nothing } <| "Message sucessfully updated" }, Cmd.none )
+            ( Alert.add model Alert.dismissableSuccess <|
+                "Message sucessfully updated"
+            , Cmd.none
+            )
 
         UpdatedMessage (Err e) ->
-            ( { model
-                | alert = add_alert model <| "Can't update message on Server: " ++ Error.toString e
-              }
+            ( Alert.add model Alert.dismissableAlert <|
+                "Can't update message on Server: "
+                    ++ Error.toString e
             , Cmd.none
             )
 
@@ -276,12 +290,52 @@ update msg model =
             , Requests.post model Login "login" <| loginJson key
             )
 
+        RemoveAlert idx vis ->
+            ( Alert.remove model idx
+            , Cmd.none
+            )
+
+        UpdateSettingsText n t ->
+            let
+                ( credentialsChanged, settings ) =
+                    updateSettings model.settings n t
+            in
+            ( { model | settings = settings, credentialsChanged = credentialsChanged }
+            , Cmd.none
+            )
+
+        UpdateSettingsReply r ->
+            let
+                settings =
+                    model.settings
+            in
+            ( { model | settings = { settings | reply = r } }
+            , Cmd.none
+            )
 
 
--- VIEW
+updateSettings settings name value =
+    case name of
+        "channel" ->
+            ( True, { settings | channel = value } )
+
+        "username" ->
+            ( True, { settings | username = value } )
+
+        "oauth" ->
+            ( True, { settings | oauth = value } )
+
+        "messageSuccess" ->
+            ( False, { settings | messageSuccess = value } )
+
+        "messageFailure" ->
+            ( False, { settings | messageFailure = value } )
+
+        _ ->
+            ( False, settings )
 
 
-tagTable model =
+tagPanel model =
     Table.table { options = [ Table.small, Table.responsive ], thead = tagListHead, tbody = tagListBody model }
 
 
@@ -375,8 +429,115 @@ messageActions name value =
     ]
 
 
-messageTable model =
-    Table.table { options = [ Table.small ], thead = messageListHead, tbody = messageListBody model }
+textInputSection updater length name value =
+    Html.p []
+        --(tooltipMaxLength value length)
+        [ InputGroup.config
+            (InputGroup.text <|
+                [ Input.onInput updater
+                , Input.value value
+                ]
+             --++ markMaxLength value length
+            )
+            |> InputGroup.predecessors
+                [ InputGroup.span []
+                    [ text <|
+                        name
+
+                    --       ++ " ("
+                    --       ++ String.fromInt (String.length value)
+                    --       ++ "/"
+                    --       ++ String.fromInt length
+                    --       ++ ")"
+                    ]
+                ]
+            |> InputGroup.view
+        ]
+
+
+checkboxSection updater name value =
+    Html.p []
+        [ Checkbox.advancedCheckbox
+            [ Checkbox.id "reply_checkbox"
+            , Checkbox.checked value
+            , Checkbox.onCheck updater
+            ]
+            (Checkbox.label [] [ text name ])
+        ]
+
+
+settingsPanel model =
+    Html.div []
+        [ Fieldset.config
+            |> Fieldset.asGroup
+            |> Fieldset.legend [] [ text "Credentials:" ]
+            |> Fieldset.children
+                [ textInputSection
+                    (UpdateSettingsText "channel")
+                    25
+                    "The channel to join"
+                    model.settings.channel
+                , textInputSection
+                    (UpdateSettingsText "username")
+                    25
+                    "username"
+                    model.settings.username
+                , textInputSection
+                    (UpdateSettingsText "oauth")
+                    25
+                    "oauth token"
+                    model.settings.oauth
+                , Button.button
+                    [ if model.credentialsChanged then
+                        Button.warning
+
+                      else
+                        Button.primary
+
+                    --, Button.onClick <| SaveSettings settings
+                    ]
+                    [ text "save (restart please)" ]
+                ]
+            |> Fieldset.view
+        , Fieldset.config
+            |> Fieldset.asGroup
+            |> Fieldset.legend [] [ text "Chat-Messages:" ]
+            |> Fieldset.children
+                [ textInputSection
+                    (UpdateSettingsText "messageSuccess")
+                    25
+                    "Response message on success"
+                    model.settings.messageSuccess
+                , textInputSection
+                    (UpdateSettingsText "messageFailure")
+                    25
+                    "Response message on failure"
+                    model.settings.messageFailure
+                , Button.button
+                    [ Button.primary
+
+                    --, Button.onClick <| SaveSettings settings
+                    ]
+                    [ text "save" ]
+                ]
+            |> Fieldset.view
+        , Fieldset.config
+            |> Fieldset.asGroup
+            |> Fieldset.legend [] [ text "Behavior:" ]
+            |> Fieldset.children
+                [ checkboxSection
+                    UpdateSettingsReply
+                    "use Reply-Messages"
+                    model.settings.reply
+                , Button.button
+                    [ Button.primary
+
+                    --, Button.onClick <| SaveSettings settings
+                    ]
+                    [ text "save" ]
+                ]
+            |> Fieldset.view
+        ]
 
 
 messageListHead =
@@ -387,12 +548,24 @@ messageListHead =
         ]
 
 
+renameMessageName name =
+    case name of
+        "response_message_success" ->
+            "Response message on success"
+
+        "response_message_failure" ->
+            "Response message on failure"
+
+        _ ->
+            name
+
+
 messageRow i msg =
     Table.tr []
         [ Table.td []
             [ Html.label
                 [ attribute "for" msg.name ]
-                [ text msg.name ]
+                [ text <| renameMessageName msg.name ]
             ]
         , Table.td []
             [ Input.text
@@ -429,9 +602,8 @@ mainPanel model =
             |> Tab.pills
             |> Tab.useHash True
             |> Tab.items
-                [ tab "Tags" <| tagTable model
-                , tab "Messages" <| messageTable model
-                , tab "Settings" <| p [] [ text "nothing" ]
+                [ tab "Tags" <| tagPanel model
+                , tab "Settings" <| settingsPanel model
                 ]
             |> Tab.view model.tabState
         ]
@@ -459,8 +631,8 @@ view model =
     { title = "Bot"
     , body =
         CDN.stylesheet
-            :: Maybe.withDefault [] model.alert
-            ++ (if model.login then
+            :: Alert.panel Alert.defaultStyle model
+            :: (if model.login then
                     mainPanel model
 
                 else
