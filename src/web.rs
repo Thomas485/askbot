@@ -15,8 +15,8 @@ fn logged_in(session: &Session) -> bool {
     session.tap(|b| *b)
 }
 
-#[get("/?<key>")]
-fn index(_session: Session, key: Option<String>) -> Result<NamedFile, status::Custom<String>> {
+#[get("/?<_key>")]
+fn index(_session: Session, _key: Option<String>) -> Result<NamedFile, status::Custom<String>> {
     NamedFile::open("index.html").map_err(|e| Custom(Status::NotFound, e.to_string()))
 }
 
@@ -102,6 +102,63 @@ fn update_tag(
     let mut t = bc.write().unwrap();
     if logged_in(&session) && id < t.tags.len() {
         t.tags[id] = tag.into_inner();
+        write_config_logged(&config_file, &t);
+        Status::Ok
+    } else {
+        Status::Forbidden
+    }
+}
+
+// frontend settings json
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct Settings {
+    channel: String,
+    username: String,
+    oauth: String,
+    messageSuccess: String,
+    messageFailure: String,
+    reply: bool,
+}
+
+#[get("/")]
+fn get_settings(
+    session: Session,
+    //id: Option<String>,
+    bc: rocket::State<'_, Arc<RwLock<BotConfig>>>,
+    config_file: rocket::State<String>,
+) -> Result<Json<Settings>, Status> {
+    let mut t = bc.read().unwrap();
+    if logged_in(&session) {
+        let settings = Settings {
+            channel: t.channel.clone(),
+            username: t.username.clone(),
+            oauth: t.oauth_token.clone(),
+            messageSuccess: t.response_message_success.clone(),
+            messageFailure: t.response_message_failure.clone(),
+            reply: t.use_reply,
+        };
+        Ok(Json(settings))
+    } else {
+        Err(Status::Forbidden)
+    }
+}
+
+#[post("/", data = "<settings>", format = "json")]
+fn update_settings(
+    session: Session,
+    //id: Option<String>,
+    settings: Json<Settings>,
+    bc: rocket::State<'_, Arc<RwLock<BotConfig>>>,
+    config_file: rocket::State<String>,
+) -> Status {
+    let mut t = bc.write().unwrap();
+    if logged_in(&session) {
+        t.channel = settings.channel.clone();
+        t.username = settings.username.clone();
+        t.oauth_token = settings.oauth.clone();
+        t.response_message_success = settings.messageSuccess.clone();
+        t.response_message_failure = settings.messageFailure.clone();
+        t.use_reply = settings.reply;
         write_config_logged(&config_file, &t);
         Status::Ok
     } else {
@@ -198,6 +255,7 @@ pub fn rocket(bc: Arc<RwLock<BotConfig>>, config_file: String) -> rocket::Rocket
         .manage(config_file)
         .mount("/", routes![index, login])
         .mount("/tags", routes![add_tag, delete_tag, get_tags, update_tag])
+        .mount("/settings", routes![update_settings, get_settings])
         .mount("/messages", routes![get_message, get_messages, set_message])
         .attach(Session::fairing())
 }

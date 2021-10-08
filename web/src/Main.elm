@@ -22,6 +22,7 @@ import Json.Encode as Encode
 import List.Extra exposing (removeAt, setAt, updateAt, updateIf)
 import Message exposing (Message)
 import Requests
+import Settings exposing (Settings)
 import Tag exposing (Tag, TagAction(..))
 import Url
 
@@ -36,16 +37,6 @@ main =
         , onUrlChange = \_ -> NoMsg
         , onUrlRequest = \_ -> NoMsg
         }
-
-
-type alias Settings =
-    { channel : String
-    , username : String
-    , oauth : String
-    , messageSuccess : String
-    , messageFailure : String
-    , reply : Bool
-    }
 
 
 type alias Model =
@@ -120,11 +111,14 @@ type Msg
     = Tags (Result Http.Error (List Tag))
     | Tag TagAction (Result Http.Error ())
     | Messages (Result Http.Error (List Message))
+    | Settings (Result Http.Error Settings)
+    | SettingsUpdated (Result Http.Error ())
     | UpdatedMessage (Result Http.Error ())
     | Login (Result Http.Error ())
     | SendLogin String
     | RemoveTag Int
     | UpdateTag Int Tag
+    | UpdateSettings Settings
     | UpdateMessageText String String
     | UpdateMessage String String
     | UpdateExistingTag Int String
@@ -148,6 +142,7 @@ update msg model =
             , Cmd.batch
                 [ Requests.get model Tags Tag.decodeList "tags/"
                 , Requests.get model Messages Message.decodeList "messages/"
+                , Requests.get model Settings Settings.decode "settings/"
                 ]
             )
 
@@ -202,6 +197,30 @@ update msg model =
         Messages (Err e) ->
             ( Alert.add model Alert.dismissableAlert <|
                 "Can't load messages: "
+                    ++ Error.toString e
+            , Cmd.none
+            )
+
+        Settings (Ok s) ->
+            ( { model | settings = s }
+            , Cmd.none
+            )
+
+        Settings (Err e) ->
+            ( Alert.add model Alert.dismissableAlert <|
+                "Can't load settings: "
+                    ++ Error.toString e
+            , Cmd.none
+            )
+
+        SettingsUpdated (Ok _) ->
+            ( model
+            , Cmd.none
+            )
+
+        SettingsUpdated (Err e) ->
+            ( Alert.add model Alert.dismissableAlert <|
+                "Can't save settings: "
                     ++ Error.toString e
             , Cmd.none
             )
@@ -265,6 +284,11 @@ update msg model =
         UpdateTag i t ->
             ( model
             , Requests.put model (Tag <| Update t i) "tags/" i <| Tag.toJson t
+            )
+
+        UpdateSettings s ->
+            ( model
+            , Requests.post model SettingsUpdated "settings/" <| Settings.toJson s
             )
 
         AddTag t ->
@@ -493,8 +517,7 @@ settingsPanel model =
 
                       else
                         Button.primary
-
-                    --, Button.onClick <| SaveSettings settings
+                    , Button.onClick <| UpdateSettings model.settings
                     ]
                     [ text "save (restart please)" ]
                 ]
@@ -515,8 +538,7 @@ settingsPanel model =
                     model.settings.messageFailure
                 , Button.button
                     [ Button.primary
-
-                    --, Button.onClick <| SaveSettings settings
+                    , Button.onClick <| UpdateSettings model.settings
                     ]
                     [ text "save" ]
                 ]
@@ -531,8 +553,7 @@ settingsPanel model =
                     model.settings.reply
                 , Button.button
                     [ Button.primary
-
-                    --, Button.onClick <| SaveSettings settings
+                    , Button.onClick <| UpdateSettings model.settings
                     ]
                     [ text "save" ]
                 ]
