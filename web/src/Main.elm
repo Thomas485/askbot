@@ -214,7 +214,7 @@ update msg model =
             )
 
         SettingsUpdated (Ok _) ->
-            ( model
+            ( { model | credentialsChanged = False }
             , Cmd.none
             )
 
@@ -511,15 +511,6 @@ settingsPanel model =
                     25
                     "oauth token"
                     model.settings.oauth
-                , Button.button
-                    [ if model.credentialsChanged then
-                        Button.warning
-
-                      else
-                        Button.primary
-                    , Button.onClick <| UpdateSettings model.settings
-                    ]
-                    [ text "save (restart please)" ]
                 ]
             |> Fieldset.view
         , Fieldset.config
@@ -536,11 +527,6 @@ settingsPanel model =
                     25
                     "Response message on failure"
                     model.settings.messageFailure
-                , Button.button
-                    [ Button.primary
-                    , Button.onClick <| UpdateSettings model.settings
-                    ]
-                    [ text "save" ]
                 ]
             |> Fieldset.view
         , Fieldset.config
@@ -551,13 +537,22 @@ settingsPanel model =
                     UpdateSettingsReply
                     "use Reply-Messages"
                     model.settings.reply
-                , Button.button
-                    [ Button.primary
-                    , Button.onClick <| UpdateSettings model.settings
-                    ]
-                    [ text "save" ]
                 ]
             |> Fieldset.view
+        , Button.button
+            [ if model.credentialsChanged then
+                Button.warning
+
+              else
+                Button.primary
+            , Button.onClick <| UpdateSettings model.settings
+            ]
+            [ if model.credentialsChanged then
+                text "save (and restart the bot please)"
+
+              else
+                text "save"
+            ]
         ]
 
 
