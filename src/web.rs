@@ -111,12 +111,13 @@ fn update_tag(
 
 // frontend settings json
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all(serialize = "camelCase", deserialize = "camelCase"))]
 struct Settings {
     channel: String,
     username: String,
     oauth: String,
-    messageSuccess: String,
-    messageFailure: String,
+    message_success: String,
+    message_failure: String,
     reply: bool,
 }
 
@@ -125,16 +126,15 @@ fn get_settings(
     session: Session,
     //id: Option<String>,
     bc: rocket::State<'_, Arc<RwLock<BotConfig>>>,
-    config_file: rocket::State<String>,
 ) -> Result<Json<Settings>, Status> {
-    let mut t = bc.read().unwrap();
+    let t = bc.read().unwrap();
     if logged_in(&session) {
         let settings = Settings {
             channel: t.channel.clone(),
             username: t.username.clone(),
             oauth: t.oauth_token.clone(),
-            messageSuccess: t.response_message_success.clone(),
-            messageFailure: t.response_message_failure.clone(),
+            message_success: t.response_message_success.clone(),
+            message_failure: t.response_message_failure.clone(),
             reply: t.use_reply,
         };
         Ok(Json(settings))
@@ -156,8 +156,8 @@ fn update_settings(
         t.channel = settings.channel.clone();
         t.username = settings.username.clone();
         t.oauth_token = settings.oauth.clone();
-        t.response_message_success = settings.messageSuccess.clone();
-        t.response_message_failure = settings.messageFailure.clone();
+        t.response_message_success = settings.message_success.clone();
+        t.response_message_failure = settings.message_failure.clone();
         t.use_reply = settings.reply;
         write_config_logged(&config_file, &t);
         Status::Ok
