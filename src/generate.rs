@@ -7,7 +7,7 @@ use std::path::Path;
 
 use crate::{write_config_logged, BotConfig, Tag};
 
-pub fn generate() -> Result<(), std::io::Error> {
+pub fn generate() -> anyhow::Result<()> {
     let theme = ColorfulTheme::default();
     let file: String = Input::with_theme(&ColorfulTheme::default())
         .with_prompt("The file to write the config to")
@@ -164,11 +164,7 @@ fn prompt_tags(theme: &dyn Theme) -> Result<Vec<Tag>, std::io::Error> {
     Ok(tags)
 }
 
-fn prompt_writing(
-    theme: &dyn Theme,
-    file: String,
-    config: BotConfig,
-) -> Result<(), std::io::Error> {
+fn prompt_writing(theme: &dyn Theme, file: String, config: BotConfig) -> anyhow::Result<()> {
     if prompt_boolean(
         theme,
         &format!("Write the configuration to {}", &file),

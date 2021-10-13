@@ -628,7 +628,7 @@ mainPanel model =
 
 loginScreen model =
     [ Html.h2 [] [ text "Login:" ]
-    , Html.label [ attribute "for" "key" ] [ text "Key:" ]
+    , Html.label [ attribute "for" "key" ] [ text "Key (default: askbot):" ]
     , Input.text
         [ Input.id "key"
         , Input.value model.loginKey

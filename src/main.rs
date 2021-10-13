@@ -1,11 +1,10 @@
 #![cfg_attr(feature = "webfrontend", feature(proc_macro_hygiene, decl_macro))]
 
 use serde::{Deserialize, Serialize};
+use std::sync::{Arc, RwLock};
 use twitch_irc::login::StaticLoginCredentials;
 use twitch_irc::ClientConfig;
 use twitch_irc::SecureTCPTransport;
-
-use std::sync::{Arc, RwLock};
 
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
@@ -42,10 +41,16 @@ pub struct Tag {
     webhook: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct BotConfig {
+    #[serde(skip_serializing_if = "String::is_empty")]
+    #[serde(default)]
     channel: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    #[serde(default)]
     username: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    #[serde(default)]
     oauth_token: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(default)]
@@ -326,8 +331,26 @@ fn log_on_discord(irc_bc: &Arc<RwLock<BotConfig>>, message: &str) {
     }
 }
 
+#[cfg(feature = "webfrontend")]
+fn create_default_config_file(path: &std::path::Path) -> anyhow::Result<()> {
+    if !path.is_file() {
+        info!("Try to create config file: {:?}", path);
+        serde_any::to_file_pretty(
+            path,
+            &BotConfig {
+                key: "askbot".to_string(),
+                use_reply: true,
+                ..std::default::Default::default()
+            },
+        )
+        .map_err(|e| anyhow::anyhow!("Can't write default config file: {:?}", e))
+    } else {
+        Ok(())
+    }
+}
+
 #[tokio::main]
-pub async fn main() -> Result<(), std::io::Error> {
+pub async fn main() -> anyhow::Result<()> {
     env_logger::init();
 
     let args = std::env::args().collect::<Vec<_>>();
@@ -340,6 +363,9 @@ pub async fn main() -> Result<(), std::io::Error> {
         }
     }
     info!("Use config file: {:#?}", config_file);
+
+    #[cfg(feature = "webfrontend")]
+    create_default_config_file(std::path::Path::new(&config_file))?;
 
     match read_config(&config_file) {
         Ok(bc) => {

@@ -17,6 +17,7 @@ rocket = { version="*", optional = true }
 rocket_session = { version="*", optional = true}
 rocket_contrib = { version="*", optional = true, features=["json"]}
 dialoguer = "*"
+anyhow = "*"
 
 [features]
 default = []
