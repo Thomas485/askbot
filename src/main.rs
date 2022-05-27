@@ -70,6 +70,9 @@ pub struct BotConfig {
     #[serde(skip_serializing_if = "String::is_empty")]
     #[serde(default)]
     response_message_failure: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    #[serde(default)]
+    whisper_response: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(default)]
     ignore: Vec<String>,
@@ -273,10 +276,16 @@ fn handle_whisper(
                 ));
             }
             Whisper::Nothing => {
-                info!("Whisper ignored");
+                info!("Mod-Whisper ignored");
                 return None;
             }
         }
+    } else if !bc.whisper_response.is_empty() {
+        return Some((
+            bc.channel.clone(),
+            login.clone(),
+            bc.whisper_response.clone(),
+        ));
     }
     None
 }

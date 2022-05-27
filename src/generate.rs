@@ -28,6 +28,7 @@ pub fn generate() -> anyhow::Result<()> {
     let mods = prompt_mods(&theme)?;
     let log_webhook = prompt_log_webhook(&theme)?;
     let (response_message_success, response_message_failure) = prompt_response_messages(&theme)?;
+    let whisper_response = prompt_whisper_response(&theme)?;
     let ignore = prompt_ignore_list(&theme, &username)?;
     let tags = prompt_tags(&theme)?;
     let use_reply = prompt_boolean(
@@ -48,6 +49,7 @@ pub fn generate() -> anyhow::Result<()> {
         log_webhook,
         response_message_success,
         response_message_failure,
+        whisper_response,
         ignore,
         tags,
         use_reply,
@@ -123,6 +125,17 @@ fn prompt_response_messages(theme: &dyn Theme) -> Result<(String, String), std::
     Ok((response_message_success, response_message_failure))
 }
 
+fn prompt_whisper_response(theme: &dyn Theme) -> Result<String, std::io::Error> {
+    let mut whisper_response = String::new();
+    if prompt_boolean(
+        theme,
+        "Do you want to add a response message to whispers?",
+        false,
+    )? {
+        whisper_response = prompt(theme, "The message to reply")?;
+    }
+    Ok(whisper_response)
+}
 fn prompt_log_webhook(theme: &dyn Theme) -> Result<String, std::io::Error> {
     if prompt_boolean(
         theme,
