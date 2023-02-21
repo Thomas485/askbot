@@ -108,8 +108,14 @@ async fn say_in_response<T>(channel: String, client: &IRCClient, msg: T, reply_t
 where
     T: Into<String>,
 {
-    if let Err(e) = client.say_in_response(channel, msg.into(), reply_to).await {
-        error!("Error: {}", e);
+    if let Some(reply_message) = reply_to {
+        if let Err(e) = client.say_in_reply_to(&(channel,reply_message), msg.into()).await {
+            error!("Error: {}", e);
+        }
+    } else {
+        if let Err(e) = client.say(channel,msg.into()).await {
+            error!("Error: {}", e);
+        }
     }
 }
 
@@ -256,7 +262,7 @@ async fn send_messages(
                         channel.clone(),
                         client,
                         t.description.clone(),
-                        Some(sender.login.clone()),
+                        Some(message_id.clone()),
                     )
                     .await;
                     continue;
@@ -534,7 +540,9 @@ pub async fn main() -> anyhow::Result<()> {
             });
 
             let channel = main_bc.read().unwrap().channel.clone();
-            irc_client_main.join(channel.clone());
+            if let Err(e) = irc_client_main.join(channel.clone()) {
+                error!("Error: {}", e);
+            }
 
             if let Some(handle) = rocket_handle {
                 tokio::join![join_handle, handle];

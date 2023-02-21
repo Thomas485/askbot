@@ -9,7 +9,7 @@ reqwest = { version="*", features = ["blocking","json"] }
 serde = { version = "*", features = ["derive"] }
 serde_json = "*"
 serde_any = "*"
-twitch-irc = "3.0.1"
+twitch-irc = "5.0"
 tokio = "*"
 log = "*"
 env_logger = "*"
