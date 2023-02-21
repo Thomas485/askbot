@@ -157,7 +157,12 @@ fn prompt_tags(theme: &dyn Theme) -> Result<Vec<Tag>, std::io::Error> {
             }
             let webhook = prompt_webhook(theme, "Webhook (empty to discard the tag)", true)?;
             if !webhook.is_empty() {
-                tags.push(Tag { tag, webhook });
+                tags.push(Tag {
+                    tag,
+                    webhook,
+                    description: "".to_string(),
+                    channel_type: "channel".to_string(),
+                });
             }
         }
     }
